@@ -12,7 +12,7 @@ load_dotenv()
 
 # --- Configure Gemini API ---
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-gemini_model = genai.GenerativeModel('gemini-1.5-flash')  # or use 'gemini-1.5-flash'
+gemini_model = genai.GenerativeModel(model_name='gemini-1.5-flash')  # or use 'gemini-1.5-flash'
 
 # --- Flask App ---
 app = Flask(__name__)
@@ -94,4 +94,5 @@ def generate_response():
 
 # --- Run App ---
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host="0.0.0.0", port=port)
