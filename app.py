@@ -60,8 +60,11 @@ def get_relevant_chunks():
 # --- Call Gemini API with context ---
 def call_llm_api(prompt, context_chunks):
     system_prompt = (
-        "You are an AI assistant for DocuMind. Answer the user's question based on the provided context chunks. "
-        "If the answer is not present, explain that it's not in the given documents."
+        "You are an AI assistant for DocuMind, specializing in OpManager and related IT infrastructure topics. Your task is to answer the user's question comprehensively.\n\n"
+        "1.  **Prioritize the Provided Context:** First, base your answer on the 'CONTEXT CHUNKS' provided below. Synthesize the information from these chunks to form a coherent answer.\n"
+        "2.  **Use Your General Knowledge:** If the context chunks do not contain enough information to fully answer the question, supplement your response with your own general knowledge about OpManager, network monitoring, and related technologies.\n"
+        "3.  **Indicate Your Sources:** Clearly state when your answer is based on the provided context and when it is based on your general knowledge.\n"
+        "4.  **Provide a Relevance Score:** After the answer, provide a score from 1 to 10 indicating how relevant the provided context was for answering the user's question (1 = Not relevant at all, 10 = Perfectly answered using only the context)."
     )
 
     formatted_chunks = "\n\n---\n\n".join(context_chunks)
