@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Web App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>DocuMind</h1>
+        <form id="prompt-form">
+            <textarea id="prompt-input" placeholder="Ask me anything about OpManager"></textarea>
+            <button type="submit" id="submit-button">Generate</button>
+        </form>
+        <div id="relevant-chunks-container" class="hidden">
+           <h2>Relevant Chunks:</h2>
+           <div id="relevant-chunks-output"></div>
+        </div>
+
+        <div id="response-container">
+            <h2>Response:</h2>
+            <pre id="response-output"></pre>
+        </div>
+        <div id="loading-spinner" class="hidden"></div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
