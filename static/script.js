@@ -3,12 +3,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const promptInput = document.getElementById('prompt-input');
     const submitButton = document.getElementById('submit-button');
     const loadingSpinner = document.getElementById('loading-spinner');
-
-    // Get the new elements for displaying chunks
     const chunksContainer = document.getElementById('relevant-chunks-container');
     const chunksOutput = document.getElementById('relevant-chunks-output');
     const responseOutput = document.getElementById('response-output');
-
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault(); // Prevent default form submission
@@ -27,72 +24,51 @@ document.addEventListener('DOMContentLoaded', () => {
         responseOutput.textContent = ''; // Clear previous response
 
         try {
-            // --- STEP 1: Fetch the relevant chunks from the backend ---
-            console.log("Step 1: Fetching relevant chunks...");
-            const chunksResponse = await fetch('/get_relevant_chunks', {
+            // --- NEW: Single API call to the '/chat' endpoint ---
+            console.log("Sending prompt to the /chat endpoint...");
+
+            // <-- CHANGE: We now make only ONE fetch request to the new /chat endpoint
+            const response = await fetch('/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                // <-- CHANGE: We only need to send the prompt now
                 body: JSON.stringify({ prompt: prompt })
             });
 
-            if (!chunksResponse.ok) {
+            if (!response.ok) {
                 // Try to parse error, otherwise use status text
-                let errorMsg = chunksResponse.statusText;
+                let errorMsg = response.statusText;
                 try {
-                    const errorData = await chunksResponse.json();
+                    const errorData = await response.json();
                     errorMsg = errorData.error || errorMsg;
                 } catch (e) { /* Ignore if response is not JSON */ }
-                throw new Error(`Failed to fetch chunks: ${errorMsg}`);
+                throw new Error(`Failed to get response: ${errorMsg}`);
             }
 
-            const chunksData = await chunksResponse.json();
-            const relevantChunks = chunksData.relevant_chunks;
-            console.log("Step 1 Success: Received chunks:", relevantChunks);
+            // <-- CHANGE: The single response contains both chunks and the LLM response
+            const data = await response.json();
+            const relevantChunks = data.relevant_chunks;
+            const llmResponse = data.llm_response;
 
+            console.log("Success: Received combined data:", data);
 
-            // --- STEP 2: Display the relevant chunks in the UI ---
+            // --- Display the relevant chunks in the UI ---
             if (relevantChunks && relevantChunks.length > 0) {
                 relevantChunks.forEach(chunk => {
                     const chunkElement = document.createElement('div');
                     chunkElement.className = 'chunk';
+                    // Using innerHTML is fine here as the content is controlled
                     chunkElement.innerHTML = `<p><strong>ID: ${chunk.id}</strong> (Distance: ${chunk.distance.toFixed(4)})</p><pre>${chunk.text}</pre>`;
                     chunksOutput.appendChild(chunkElement);
                 });
                 chunksContainer.classList.remove('hidden'); // Show the container
             } else {
-                 chunksOutput.innerHTML = '<p>No relevant chunks found.</p>';
+                 chunksOutput.innerHTML = '<p>No relevant chunks found from your documents.</p>';
+                 chunksContainer.classList.remove('hidden');
             }
 
-
-            // --- STEP 3: Pass the prompt AND the chunks to the LLM to generate the final response ---
-            //    (This assumes you have a '/generate' endpoint ready to accept this data)
-            console.log("Step 3: Sending prompt and chunks to LLM for final response...");
-
-            // NOTE: We are creating a hypothetical '/generate' endpoint call here.
-            // You will need to create this endpoint in your Flask app.
-            const llmResponse = await fetch('/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prompt: prompt,
-                    // Send the text of the chunks to the LLM
-                    chunks: relevantChunks.map(c => c.text)
-                })
-            });
-
-            if (!llmResponse.ok) {
-                let errorMsg = llmResponse.statusText;
-                try {
-                    const errorData = await llmResponse.json();
-                    errorMsg = errorData.error || errorMsg;
-                } catch (e) { /* Ignore if response is not JSON */ }
-                throw new Error(`LLM generation failed: ${errorMsg}`);
-            }
-
-            const finalData = await llmResponse.json();
-            responseOutput.textContent = finalData.response;
-            console.log("Step 3 Success: Received final response.");
-
+            // --- Display the final LLM response ---
+            responseOutput.textContent = llmResponse;
 
         } catch (error) {
             console.error(error);

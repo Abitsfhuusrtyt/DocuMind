@@ -11,91 +11,107 @@ from sentence_transformers import SentenceTransformer
 load_dotenv()
 
 # --- Configure Gemini API ---
+# Make sure to set your GOOGLE_API_KEY in a .env file
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-gemini_model = genai.GenerativeModel(model_name='gemini-1.5-flash')  # or use 'gemini-1.5-flash'
+gemini_model = genai.GenerativeModel(model_name='gemini-1.5-flash')
 
 # --- Flask App ---
 app = Flask(__name__)
 
 # --- Load files and models on startup ---
+# These print statements help confirm that the files are loaded correctly on startup
+print("Loading sentence transformer model...")
 model = SentenceTransformer('all-MiniLM-L6-v2')
-index = faiss.read_index('corpus.index')
+print("Model loaded.")
 
+print("Loading FAISS index...")
+index = faiss.read_index('corpus.index')
+print("Index loaded.")
+
+print("Loading chunk data...")
 with open('chunk_ids.json', 'r') as f:
     chunk_ids = json.load(f)
 with open('chunks.json', 'r') as f:
     chunks = json.load(f)
+print("Chunk data loaded.")
 
-# --- Function to search similar chunks ---
+# --- Core Functions ---
+
 def search_relevant_chunks(query, top_k=5):
-    query_embedding = model.encode([query], convert_to_tensor=True)
-    distances, indices = index.search(query_embedding.cpu().numpy(), top_k)
+    """Encodes the query and searches the FAISS index for top_k most similar chunks."""
+    query_embedding = model.encode([query])
+    distances, indices = index.search(np.array(query_embedding).astype('float32'), top_k)
 
     results = []
     for i, idx in enumerate(indices[0]):
-        results.append({
-            'id': chunk_ids[idx],
-            'text': chunks[idx],
-            'distance': distances[0][i].item()
-        })
+        # Ensure the index is within the bounds of your data
+        if idx < len(chunk_ids) and idx < len(chunks):
+            results.append({
+                'id': chunk_ids[idx],
+                'text': chunks[idx],
+                'distance': distances[0][i].item()
+            })
     return results
 
-# --- Routes ---
-@app.route('/')
-def home():
-    return render_template('index.html')
-
-@app.route('/get_relevant_chunks', methods=['POST'])
-def get_relevant_chunks():
-    data = request.get_json()
-    prompt = data.get('prompt')
-    print(f"[get_relevant_chunks] Received prompt: {prompt}")
-
-    if not prompt:
-        return jsonify({'error': 'Prompt is required.'}), 400
-
-    relevant_chunks = search_relevant_chunks(prompt)
-    return jsonify({'relevant_chunks': relevant_chunks})
-
-# --- Call Gemini API with context ---
-def call_llm_api(prompt, context_chunks):
+def get_llm_response(prompt):
+    """Calls the Gemini API with only the user's prompt."""
+    # This system prompt is now much simpler as we are not sending context.
     system_prompt = (
-        "You are an AI assistant for DocuMind, specializing in OpManager and related IT infrastructure topics. Your task is to answer the user's question comprehensively.\n\n"
-        "1.  **Prioritize the Provided Context:** First, base your answer on the 'CONTEXT CHUNKS' provided below. Synthesize the information from these chunks to form a coherent answer.\n"
-        "2.  **Use Your General Knowledge:** If the context chunks do not contain enough information to fully answer the question, supplement your response with your own general knowledge about OpManager, network monitoring, and related technologies.\n"
-        "3.  **Indicate Your Sources:** Clearly state when your answer is based on the provided context and when it is based on your general knowledge.\n"
-        "4.  **Provide a Relevance Score:** After the answer, provide a score from 1 to 10 indicating how relevant the provided context was for answering the user's question (1 = Not relevant at all, 10 = Perfectly answered using only the context)."
+        "You are an AI assistant for DocuMind, specializing in OpManager and related IT infrastructure topics. "
+        "Answer the user's question based on your general knowledge."
     )
+    
+    final_prompt = f"{system_prompt}\n\nUSER'S QUESTION:\n{prompt}"
 
-    formatted_chunks = "\n\n---\n\n".join(context_chunks)
-    final_prompt = f"{system_prompt}\n\nCONTEXT CHUNKS:\n{formatted_chunks}\n\nUSER'S QUESTION:\n{prompt}"
-
-    print("[generate] Sending prompt to Gemini:")
-    print(final_prompt[:300] + "..." if len(final_prompt) > 300 else final_prompt)  # Print partial prompt
-
+    print("[get_llm_response] Sending simplified prompt to Gemini (NO CHUNKS)...")
+    
     try:
         response = gemini_model.generate_content(final_prompt)
         return response.text
     except Exception as e:
         print(f"[Gemini ERROR] {e}")
-        return "Error generating response from Gemini API."
+        return "An error occurred while generating the response from the AI model."
 
-@app.route('/generate', methods=['POST'])
-def generate_response():
+# --- API Routes ---
+
+@app.route('/')
+def home():
+    """Serves the main HTML page."""
+    return render_template('index.html')
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    """
+    Main endpoint to handle user interaction.
+    1. Receives a prompt.
+    2. Finds relevant chunks from the local vector database.
+    3. Gets a response from the LLM based ONLY on the prompt.
+    4. Returns both chunks and the LLM response to the UI.
+    """
     data = request.get_json()
     prompt = data.get('prompt')
-    context_chunks = data.get('chunks')
 
-    if not prompt or context_chunks is None:
-        return jsonify({'error': 'Prompt and chunks are required.'}), 400
+    if not prompt:
+        return jsonify({'error': 'A prompt is required.'}), 400
 
-    print(f"[generate] Prompt: {prompt}")
-    print(f"[generate] Chunks preview: {context_chunks[:1]}")
+    print(f"\n[chat] Received prompt: {prompt}")
 
-    llm_output = call_llm_api(prompt, context_chunks)
-    return jsonify({'response': llm_output})
+    # Step 1: Get relevant chunks locally
+    relevant_chunks = search_relevant_chunks(prompt)
+    print(f"[chat] Found {len(relevant_chunks)} relevant chunks.")
+
+    # Step 2: Get LLM response using only the prompt to save API tokens
+    llm_output = get_llm_response(prompt)
+    
+    # Step 3: Send both back to the UI in a single response
+    return jsonify({
+        'relevant_chunks': relevant_chunks,
+        'llm_response': llm_output
+    })
 
 # --- Run App ---
 if __name__ == '__main__':
+    # Use the PORT environment variable if available, otherwise default to 5000
     port = int(os.environ.get("PORT", 5000))
+    # Set debug=False for production environments
     app.run(debug=False, host="0.0.0.0", port=port)
