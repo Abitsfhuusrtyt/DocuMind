@@ -18,14 +18,14 @@ pipeline:
                 # It uses the requirements.txt file you provided.
                 - step:
                     name: Install Python Dependencies
-                    command: pip install -r requirements.txt -t .
+                    command: pip install -r requirements.txt -t
               # 'Artifacts' are the files that get saved from this stage
               # to be used in the next 'Deploy' stage.
               artifacts:
                 # We are bundling all project files.
                 - name: documind-app
                   paths:
-                    - .
+                    
 
     # The second stage is 'Deploy', where we push the built application to Catalyst.
     - stage:
