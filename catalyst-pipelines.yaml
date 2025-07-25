@@ -1,0 +1,49 @@
+# catalyst-pipelines.yaml
+
+# This pipeline defines the automated process to deploy your DocuMind project.
+pipeline:
+  name: DocuMind-Flask-App-Deployment
+  stages:
+    # The first stage is 'Build', where we prepare the application for deployment.
+    - stage:
+        name: Build
+        jobs:
+          - job:
+              name: Prepare-App-for-Deployment
+              # We use a standard Catalyst runner with Python support.
+              runner:
+                image: zoho/catalyst-integ:2.0.0
+              steps:
+                # This step installs all the Python packages your Flask app needs.
+                # It uses the requirements.txt file you provided.
+                - step:
+                    name: Install Python Dependencies
+                    command: pip install -r requirements.txt -t .
+              # 'Artifacts' are the files that get saved from this stage
+              # to be used in the next 'Deploy' stage.
+              artifacts:
+                # We are bundling all project files.
+                - name: documind-app
+                  paths:
+                    - .
+
+    # The second stage is 'Deploy', where we push the built application to Catalyst.
+    - stage:
+        name: Deploy
+        jobs:
+          - job:
+              name: Deploy-to-Catalyst-AppSail
+              # This job also runs on a standard Catalyst runner.
+              runner:
+                image: zoho/catalyst-integ:2.0.0
+              steps:
+                # Before deploying, we need the files prepared in the 'Build' stage.
+                # This command downloads the 'documind-app' artifact.
+                - step:
+                    name: Download Built Artifacts
+                    command: catalyst artifact:download --name documind-app
+                # This is the final step that deploys your entire application.
+                # It targets 'appsail' which is where your Flask app will run.
+                - step:
+                    name: Deploy AppSail Service
+                    command: catalyst deploy --only appsail
